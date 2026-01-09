@@ -1,0 +1,126 @@
+# MBR自动化系统配置文件
+
+application:
+  name: "MBR Automation System"
+  version: "1.0.0"
+  environment: "development"  # development, staging, production
+  debug: true
+
+# 数据源配置
+data_sources:
+  excel:
+    default_path: "data/input/"
+    supported_formats: [".xlsx", ".xls"]
+    max_file_size_mb: 50
+
+  database:
+    connection_timeout: 30
+    pool_size: 5
+    max_overflow: 10
+
+  csv:
+    encoding: "utf-8"
+    delimiter: ","
+
+# 数据处理配置
+processing:
+  date_format: "%Y-%m-%d"
+  currency: "CNY"
+  locale: "zh_CN"
+
+  # 计算设置
+  yoy_baseline_months: 12
+  mom_baseline_months: 1
+
+  # 聚合规则
+  aggregate_by: ["month", "quarter", "channel"]
+  include_ytd: true
+
+# 数据验证配置
+validation:
+  strict_mode: false
+  fail_on_warning: false
+
+  rules:
+    required_sheets:
+      - "目标表"
+
+    required_metrics:
+      - gmv
+      - net
+      - uv
+      - cr
+      - aov
+
+    data_quality:
+      min_data_points: 20
+      max_missing_percentage: 0.1
+
+# AI配置
+ai:
+  provider: "anthropic"
+  model: "claude-3-5-sonnet-20241022"
+  max_tokens: 4000
+  temperature: 0.3
+
+  insight_generation:
+    enabled: true
+    executive_summary: true
+    sales_insights: true
+    traffic_insights: true
+    recommendations: true
+
+# PowerPoint配置
+powerpoint:
+  template_dir: "templates"
+  default_brand: "dunhill"
+
+  slide_settings:
+    width: 12192000  # 标准16:9
+    height: 6858000
+
+  formatting:
+    decimal_places: 2
+    thousands_separator: true
+    percentage_format: "0.0%"
+
+  quality:
+    min_slide_count: 18
+    require_tables: true
+    require_charts: false  # 由于python-pptx限制,暂时不强制要求
+
+# API配置 (如果使用Web界面)
+api:
+  host: "0.0.0.0"
+  port: 8000
+  workers: 4
+
+  cors:
+    enabled: true
+    origins: ["*"]
+
+  rate_limiting:
+    enabled: true
+    requests_per_minute: 60
+
+# 日志配置
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+  handlers:
+    console:
+      enabled: true
+    file:
+      enabled: true
+      path: "outputs/logs/app.log"
+      max_bytes: 10485760  # 10MB
+      backup_count: 5
+
+# 路径配置
+paths:
+  input: "data/input/"
+  output: "outputs/reports/"
+  templates: "templates/"
+  cache: "outputs/cache/"
+  logs: "outputs/logs/"

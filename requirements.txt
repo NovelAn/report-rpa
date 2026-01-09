@@ -1,0 +1,35 @@
+# MBR自动化系统依赖包
+
+# 核心依赖
+python>=3.11
+pydantic>=2.0.0
+pandas>=2.0.0
+numpy>=1.24.0
+
+# 数据处理
+openpyxl>=3.1.0
+xlrd>=2.0.0
+
+# PowerPoint生成
+python-pptx>=0.6.21
+
+# AI/ML
+anthropic>=0.18.0
+
+# API (可选,用于Web界面)
+fastapi>=0.104.0
+uvicorn>=0.24.0
+python-multipart>=0.0.6
+
+# 工具
+pyyaml>=6.0
+python-dotenv>=1.0.0
+
+# 测试
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.1.0
+
+# 代码质量
+black>=23.0.0
+mypy>=1.5.0
