@@ -1,6 +1,7 @@
 """
 渠道汇总计算器
 实现渠道层级汇总逻辑: TOTAL = PFS + DTC, DTC = WBTQ + OFS
+支持Core Business核心业务指标: CORE_BUSINESS = PFS + DTC_EXCL_FF_SC
 """
 
 from typing import List, Optional, Dict
@@ -337,3 +338,111 @@ class ChannelAggregator:
                 shares[period][channel] = round(share, 2)
 
         return shares
+
+    @staticmethod
+    def calculate_core_business(
+        pfs_metric: Optional[MonthlyMetrics],
+        dtc_excl_ff_sc_metric: Optional[MonthlyMetrics]
+    ) -> Optional[MonthlyMetrics]:
+        """
+        计算核心业务指标 (CORE_BUSINESS)
+
+        CORE_BUSINESS = PFS + DTC_EXCL_FF_SC
+        其中 DTC_EXCL_FF_SC = DTC - FF - SC
+
+        Args:
+            pfs_metric: PFS渠道月度数据
+            dtc_excl_ff_sc_metric: DTC剔除FF和SC后的月度数据
+
+        Returns:
+            CORE_BUSINESS月度数据,如果输入不完整则返回None
+        """
+        if not pfs_metric or not dtc_excl_ff_sc_metric:
+            return None
+
+        # 确保期间一致
+        if (pfs_metric.year != dtc_excl_ff_sc_metric.year or
+            pfs_metric.month != dtc_excl_ff_sc_metric.month):
+            return None
+
+        # 合并退款相关字段
+        cancel_amount = None
+        return_amount = None
+        if (pfs_metric.cancel_amount is not None and
+            dtc_excl_ff_sc_metric.cancel_amount is not None):
+            cancel_amount = (pfs_metric.cancel_amount +
+                           dtc_excl_ff_sc_metric.cancel_amount)
+
+        if (pfs_metric.return_amount is not None and
+            dtc_excl_ff_sc_metric.return_amount is not None):
+            return_amount = (pfs_metric.return_amount +
+                            dtc_excl_ff_sc_metric.return_amount)
+
+        # 计算订单数
+        orders = None
+        if pfs_metric.orders is not None and dtc_excl_ff_sc_metric.orders is not None:
+            orders = pfs_metric.orders + dtc_excl_ff_sc_metric.orders
+
+        # 计算GMV件数
+        gmv_units = None
+        if pfs_metric.gmv_units is not None and dtc_excl_ff_sc_metric.gmv_units is not None:
+            gmv_units = pfs_metric.gmv_units + dtc_excl_ff_sc_metric.gmv_units
+
+        # 创建CORE_BUSINESS数据
+        core_business = MonthlyMetrics(
+            year=pfs_metric.year,
+            month=pfs_metric.month,
+            channel=ChannelType.CORE_BUSINESS,
+            gmv=pfs_metric.gmv + dtc_excl_ff_sc_metric.gmv,
+            net=pfs_metric.net + dtc_excl_ff_sc_metric.net,
+            uv=pfs_metric.uv + dtc_excl_ff_sc_metric.uv,
+            buyers=pfs_metric.buyers + dtc_excl_ff_sc_metric.buyers,
+            orders=orders,
+            gmv_units=gmv_units,
+            aov=0.0,  # 需要重新计算
+            atv=None,  # 需要重新计算
+            aur=None,  # 需要重新计算
+            cr=0.0,  # 需要重新计算
+            paid_traffic=pfs_metric.paid_traffic + dtc_excl_ff_sc_metric.paid_traffic,
+            free_traffic=pfs_metric.free_traffic + dtc_excl_ff_sc_metric.free_traffic,
+            non_paid_traffic=pfs_metric.non_paid_traffic + dtc_excl_ff_sc_metric.non_paid_traffic,
+            cancel_amount=cancel_amount,
+            return_amount=return_amount,
+            total_refund_amount=(cancel_amount or 0) + (return_amount or 0)
+                               if cancel_amount and return_amount else None,
+            cancel_rate=None,
+            return_rate=None,
+            rrc=None,
+            rrc_after_cancel=None
+        )
+
+        # 重新计算派生指标
+        if core_business.orders and core_business.orders > 0:
+            core_business.aov = core_business.gmv / core_business.orders
+
+        if core_business.buyers and core_business.buyers > 0:
+            core_business.atv = core_business.gmv / core_business.buyers
+
+        if core_business.gmv_units and core_business.gmv_units > 0:
+            core_business.aur = core_business.gmv / core_business.gmv_units
+
+        if core_business.uv and core_business.uv > 0:
+            core_business.cr = (core_business.buyers / core_business.uv) * 100
+
+        # 计算退款率
+        if cancel_amount and return_amount and core_business.gmv > 0:
+            from .calculator import MetricCalculator
+            core_business.cancel_rate = MetricCalculator.calculate_cancel_rate(
+                cancel_amount, core_business.gmv
+            )
+            core_business.return_rate = MetricCalculator.calculate_return_rate(
+                return_amount, core_business.gmv
+            )
+            core_business.rrc = MetricCalculator.calculate_rrc(
+                return_amount, cancel_amount, core_business.gmv
+            )
+            core_business.rrc_after_cancel = MetricCalculator.calculate_rrc_after_cancel(
+                return_amount, core_business.gmv, cancel_amount
+            )
+
+        return core_business

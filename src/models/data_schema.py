@@ -136,6 +136,11 @@ class ChannelType(str, Enum):
         - WBTQ (微信小程序)
         - OFS (线下门店+官网)
         - 销售来源: Social + FF + Organic
+
+    派生渠道 (用于业务分析):
+        - DTC_EXCL_FF: DTC剔除FF
+        - DTC_EXCL_FF_SC: DTC剔除FF和Social (Core Business的DTC部分)
+        - CORE_BUSINESS: 核心业务 = PFS + DTC_EXCL_FF_SC
     """
     PFS = "PFS"  # Platform Full Service (天猫/京东等第三方平台)
     DTC = "DTC"  # Direct to Consumer (直营渠道: WBTQ + OFS)
@@ -143,6 +148,11 @@ class ChannelType(str, Enum):
     OFS = "OFS"  # Offline Store + Official Website (线下门店+官网)
     TOTAL = "TOTAL"  # 全渠道汇总 (PFS + DTC)
     TMALL = "TMALL"  # 天猫 (PFS子渠道)
+
+    # 派生渠道类型 (用于业务分析)
+    DTC_EXCL_FF = "DTC_EXCL_FF"  # DTC剔除员工福利
+    DTC_EXCL_FF_SC = "DTC_EXCL_FF_SC"  # DTC剔除FF和Social (核心业务DTC部分)
+    CORE_BUSINESS = "CORE_BUSINESS"  # 核心业务 = PFS + DTC_EXCL_FF_SC
 
 
 class MetricType(str, Enum):
@@ -214,6 +224,12 @@ class TargetMetric(BaseModel):
     dtc_organic_gmv: Optional[float] = Field(default=None, description="DTC自然渠道GMV")
     dtc_organic_rrc: Optional[float] = Field(default=None, description="DTC自然渠道退款率")
     dtc_organic_traffic: Optional[int] = Field(default=None, description="DTC自然渠道流量")
+
+    # DTC FF 渠道 (员工福利 - Friends & Family)
+    dtc_ff_net: Optional[float] = Field(default=None, description="DTC员工福利净销售")
+    dtc_ff_gmv: Optional[float] = Field(default=None, description="DTC员工福利GMV")
+    dtc_ff_rrc: Optional[float] = Field(default=None, description="DTC员工福利退款率")
+    dtc_ff_traffic: Optional[int] = Field(default=None, description="DTC员工福利流量")
 
     @field_validator('cr', 'rrc')
     @classmethod
@@ -331,7 +347,7 @@ class MonthlyMetrics(BaseModel):
     aur: Optional[float] = Field(default=None, ge=0, description="件单价 (GMV/GMV_Units)")
     cr: float = Field(ge=0, le=100)
     paid_traffic: int = Field(ge=0)
-    non_paid_traffic: int = Field(ge=0)
+    non_paid_traffic: int = Field(default=0, ge=0)
     free_traffic: int = Field(ge=0)
 
     # 退款相关字段
@@ -584,6 +600,10 @@ def dataframe_to_target_metrics(df: pd.DataFrame) -> List[TargetMetric]:
                 dtc_organic_gmv=row.get('dtc_organic_gmv') if pd.notna(row.get('dtc_organic_gmv')) else None,
                 dtc_organic_rrc=row.get('dtc_organic_rrc') if pd.notna(row.get('dtc_organic_rrc')) else None,
                 dtc_organic_traffic=int(row.get('dtc_organic_traffic')) if pd.notna(row.get('dtc_organic_traffic')) else None,
+                dtc_ff_net=row.get('dtc_ff_net') if pd.notna(row.get('dtc_ff_net')) else None,
+                dtc_ff_gmv=row.get('dtc_ff_gmv') if pd.notna(row.get('dtc_ff_gmv')) else None,
+                dtc_ff_rrc=row.get('dtc_ff_rrc') if pd.notna(row.get('dtc_ff_rrc')) else None,
+                dtc_ff_traffic=int(row.get('dtc_ff_traffic')) if pd.notna(row.get('dtc_ff_traffic')) else None,
             )
             metrics.append(metric)
         except Exception as e:

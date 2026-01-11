@@ -45,33 +45,57 @@ report-designer/
 pip install -r requirements.txt
 ```
 
-### 2. 配置环境变量
+### 2. 测试系统 (推荐)
+
+```bash
+# 使用模拟数据测试所有功能
+python test_phase1.py --mock
+```
+
+### 3. 运行完整处理
+
+```bash
+# 使用你的Excel数据
+python main.py --input data/input/MBR数据模板.xlsx --period 2025-12
+```
+
+### 4. 配置环境变量 (可选)
 
 ```bash
 cp .env.example .env
 # 编辑 .env 文件,添加 ANTHROPIC_API_KEY
 ```
 
-### 3. 运行示例
+### 快速示例
 
 ```python
-from src.ingestion import ExcelDataReader
-from src.transformation import DataAggregator
-from src.validation import DataValidator
+from src.ingestion.excel_reader import ExcelDataReader
+from src.transformation.calculator import DataAggregator
+from src.models.data_schema import ChannelType
 
 # 读取Excel数据
 reader = ExcelDataReader("path/to/MBR数据模板.xlsx")
 data = reader.parse_all()
 
-# 计算月度聚合
+# 聚合为月度数据
 aggregator = DataAggregator(data.target_metrics)
-monthly_metrics = aggregator.calculate_all_monthly()
-data.monthly_metrics = monthly_metrics
+dtc_monthly = aggregator.aggregate_monthly(2025, 12, ChannelType.DTC)
 
-# 验证数据
-validator = DataValidator()
-result = validator.validate_report_data(data)
-print(f"验证结果: {result.to_dict()}")
+print(f"DTC 12月净销售: {dtc_monthly.net:,.2f}")
+
+# 渠道剔除: 剔除FF(员工福利)和SC(社群推广)
+dtc_excl_ff_sc = aggregator.aggregate_monthly_with_exclusion(
+    2025, 12, ChannelType.DTC,
+    exclude_ff=True,
+    exclude_social=True
+)
+
+# 计算Core Business
+from src.transformation.channel_aggregator import ChannelAggregator
+pfs_monthly = aggregator.aggregate_monthly(2025, 12, ChannelType.PFS)
+core_business = ChannelAggregator.calculate_core_business(pfs_monthly, dtc_excl_ff_sc)
+
+print(f"Core Business: {core_business.net:,.2f}")
 ```
 
 ## 核心功能

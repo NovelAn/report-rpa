@@ -8,15 +8,70 @@ application:
 
 # 数据源配置
 data_sources:
+  # 数据库配置 (推荐用于生产环境)
+  database:
+    enabled: false  # 设置为true启用数据库查询
+    connection:
+      host: "localhost"
+      port: 3306
+      database: "mbr_production"
+      user: "mbr_readonly"
+      password: "${DB_PASSWORD}"  # 从环境变量读取
+      charset: "utf8mb4"
+      pool_size: 5
+      max_overflow: 10
+      connection_timeout: 30
+
+  # 数据源优先级
+  priority:
+    - database  # 优先使用数据库
+    - excel     # 数据库不可用时使用Excel
+
+  # 工作表数据源映射
+  sheets:
+    # 使用数据库查询的工作表
+    target_table:
+      source: database
+      query: "src/ingestion/database/queries/target_metrics.sql"
+
+    monthly_summary:
+      source: database
+      query: "src/ingestion/database/queries/monthly_summary.sql"
+
+    traffic_source_l1:
+      source: database
+      query: "src/ingestion/database/queries/traffic_l1.sql"
+
+    traffic_source_l2:
+      source: database
+      query: "src/ingestion/database/queries/traffic_l2.sql"
+
+    traffic_source_l3:
+      source: database
+      query: "src/ingestion/database/queries/traffic_l3.sql"
+
+    # 通过计算生成的工作表
+    campaign:
+      source: calculated
+      method: aggregate_by_campaign
+
+    sales_overview:
+      source: calculated
+      method: calculate_overview
+
+    dunhill_traffic_pivot:
+      source: calculated
+      method: create_pivot_table
+
+    pfs_traffic:
+      source: calculated
+      method: aggregate_pfs_traffic
+
+  # Excel配置 (备用数据源)
   excel:
     default_path: "data/input/"
     supported_formats: [".xlsx", ".xls"]
     max_file_size_mb: 50
-
-  database:
-    connection_timeout: 30
-    pool_size: 5
-    max_overflow: 10
 
   csv:
     encoding: "utf-8"
@@ -35,6 +90,28 @@ processing:
   # 聚合规则
   aggregate_by: ["month", "quarter", "channel"]
   include_ytd: true
+
+  # 渠道剔除配置 (用于灵活的业务分析)
+  channel_exclusion:
+    # 是否启用DTC渠道剔除
+    enabled: true
+
+    # DTC剔除配置
+    dtc_exclusions:
+      # 剔除FF (员工福利) - 适用于日常销售分析
+      exclude_ff: false
+
+      # 剔除SC (Social社群推广) - 适用于核心业务分析
+      exclude_social: false
+
+      # 同时剔除FF和SC - 用于Core Business计算
+      exclude_ff_and_social: false
+
+    # 自动计算派生渠道指标
+    calculate_derived_channels:
+      - DTC_EXCL_FF           # DTC剔除FF
+      - DTC_EXCL_FF_SC        # DTC剔除FF和SC
+      - CORE_BUSINESS         # PFS + DTC_EXCL_FF_SC
 
 # 数据验证配置
 validation:

@@ -247,6 +247,7 @@ class DataAggregator:
     """
     数据聚合器
     将日度数据聚合为月度数据
+    支持渠道剔除逻辑(FF、SC)
     """
 
     def __init__(self, daily_metrics: List[TargetMetric]):
@@ -292,7 +293,7 @@ class DataAggregator:
             (self.df['year'] == year) &
             (self.df['month'] == month) &
             (self.df['channel'] == channel_str)
-        ]
+        ].copy()  # 添加.copy()避免SettingWithCopyWarning
 
         if monthly_df.empty:
             logger.warning(f"No data found for {year}-{month:02d} {channel}")
@@ -576,3 +577,147 @@ class DataAggregator:
                 )
 
         return monthly_metrics
+
+    def aggregate_monthly_with_exclusion(
+        self,
+        year: int,
+        month: int,
+        channel: ChannelType,
+        exclude_ff: bool = False,
+        exclude_social: bool = False
+    ) -> Optional[MonthlyMetrics]:
+        """
+        聚合指定月份的数据,支持渠道剔除
+
+        适用于DTC渠道的灵活分析:
+        - exclude_ff: 剔除员工福利(FF)渠道
+        - exclude_social: 剔除社群推广(SC)渠道
+
+        Args:
+            year: 年份
+            month: 月份 (1-12)
+            channel: 渠道
+            exclude_ff: 是否剔除FF (仅对DTC有效)
+            exclude_social: 是否剔除SC (仅对DTC有效)
+
+        Returns:
+            MonthlyMetrics对象,如果没有数据则返回None
+        """
+        if self.df.empty:
+            return None
+
+        # 过滤数据
+        channel_str = channel.value if isinstance(channel, ChannelType) else channel
+        monthly_df = self.df[
+            (self.df['year'] == year) &
+            (self.df['month'] == month) &
+            (self.df['channel'] == channel_str)
+        ].copy()  # 添加.copy()避免SettingWithCopyWarning
+
+        if monthly_df.empty:
+            logger.warning(f"No data found for {year}-{month:02d} {channel}")
+            return None
+
+        # === 应用渠道剔除逻辑 (仅对DTC渠道有效) ===
+        if channel == ChannelType.DTC and (exclude_ff or exclude_social):
+            # 计算需要剔除的销售数据
+            total_ff_net = 0
+            total_ff_gmv = 0
+            total_sc_net = 0
+            total_sc_gmv = 0
+
+            # 剔除FF (员工福利)
+            if exclude_ff:
+                total_ff_net = monthly_df['dtc_ff_net'].fillna(0).sum()
+                total_ff_gmv = monthly_df['dtc_ff_gmv'].fillna(0).sum()
+
+            # 剔除SC (Social社群推广)
+            if exclude_social:
+                total_sc_net = monthly_df['dtc_social_net'].fillna(0).sum()
+                total_sc_gmv = monthly_df['dtc_social_gmv'].fillna(0).sum()
+
+            # 应用剔除（只影响销售数据，不影响UV和buyers）
+            if total_ff_net > 0 or total_sc_net > 0:
+                monthly_df['net'] = monthly_df['net'] - total_ff_net - total_sc_net
+                monthly_df['gmv'] = monthly_df['gmv'] - total_ff_gmv - total_sc_gmv
+
+                if exclude_ff and total_ff_net > 0:
+                    logger.info(
+                        f"Excluded FF from DTC {year}-{month:02d}: "
+                        f"FF_NET={total_ff_net:.2f}, FF_GMV={total_ff_gmv:.2f}"
+                    )
+
+                if exclude_social and total_sc_net > 0:
+                    logger.info(
+                        f"Excluded SC from DTC {year}-{month:02d}: "
+                        f"SC_NET={total_sc_net:.2f}, SC_GMV={total_sc_gmv:.2f}"
+                    )
+
+        # 计算聚合指标
+        gmv = max(0, monthly_df['gmv'].fillna(0).sum())  # 确保非负
+        net = max(0, monthly_df['net'].fillna(0).sum())
+        uv = int(max(0, monthly_df['uv'].fillna(0).sum()))  # 确保非负
+        buyers = int(monthly_df['buyers'].fillna(0).sum())
+        paid_traffic = int(monthly_df['paid_traffic'].fillna(0).sum())
+        free_traffic = int(monthly_df['free_traffic'].fillna(0).sum())
+        non_paid_traffic = int(monthly_df.get('non_paid_traffic', pd.Series()).fillna(0).sum())
+
+        # 计算派生指标
+        orders = int(monthly_df['orders'].fillna(0).sum()) if 'orders' in monthly_df.columns else None
+        gmv_units = int(monthly_df['gmv_units'].fillna(0).sum()) if 'gmv_units' in monthly_df.columns else None
+
+        aov = MetricCalculator.calculate_aov(gmv, orders) or 0.0 if orders else 0.0
+        atv = MetricCalculator.calculate_atv(gmv, buyers)
+        aur = MetricCalculator.calculate_aur(gmv, gmv_units)
+        cr = MetricCalculator.calculate_cr(buyers, uv) or 0.0
+
+        # 计算退款相关字段
+        cancel_amount = monthly_df['cancel_amount'].fillna(0).sum() if 'cancel_amount' in monthly_df.columns else None
+        return_amount = monthly_df['return_amount'].fillna(0).sum() if 'return_amount' in monthly_df.columns else None
+
+        # 计算退款率
+        rrc = None
+        cancel_rate = None
+        return_rate_val = None
+        rrc_after_cancel_val = None
+
+        if cancel_amount is not None and return_amount is not None and gmv > 0:
+            rrc = MetricCalculator.calculate_rrc(return_amount, cancel_amount, gmv)
+            cancel_rate = MetricCalculator.calculate_cancel_rate(cancel_amount, gmv)
+            return_rate_val = MetricCalculator.calculate_return_rate(return_amount, gmv)
+            rrc_after_cancel_val = MetricCalculator.calculate_rrc_after_cancel(return_amount, gmv, cancel_amount)
+
+        # 确定返回的渠道类型
+        result_channel = channel
+        if channel == ChannelType.DTC:
+            if exclude_ff and exclude_social:
+                result_channel = ChannelType.DTC_EXCL_FF_SC
+            elif exclude_ff:
+                result_channel = ChannelType.DTC_EXCL_FF
+
+        return MonthlyMetrics(
+            year=year,
+            month=month,
+            channel=result_channel,
+            gmv=gmv,
+            net=net,
+            uv=uv,
+            buyers=buyers,
+            orders=orders,
+            gmv_units=gmv_units,
+            aov=aov,
+            atv=atv,
+            aur=aur,
+            cr=cr,
+            paid_traffic=paid_traffic,
+            free_traffic=free_traffic,
+            non_paid_traffic=non_paid_traffic,
+            cancel_amount=cancel_amount,
+            return_amount=return_amount,
+            total_refund_amount=(cancel_amount or 0) + (return_amount or 0)
+                               if cancel_amount is not None and return_amount is not None else None,
+            cancel_rate=cancel_rate,
+            return_rate=return_rate_val,
+            rrc=rrc,
+            rrc_after_cancel=rrc_after_cancel_val
+        )
