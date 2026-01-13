@@ -1,0 +1,26 @@
+{
+  "databases": [
+    {
+      "name": "本地开发数据库",
+      "host": "localhost",
+      "port": 3306,
+      "database": "dunhill",
+      "user": "root",
+      "password": "your_local_password"
+    },
+    {
+      "name": "阿里云RDS生产数据库",
+      "host": "rm-uf68p191h7j2o40s34o.mysql.rds.aliyuncs.com",
+      "port": 3306,
+      "database": "dunhill",
+      "user": "novelan",
+      "password": "your_prod_password"
+    }
+  ],
+  "_comment": {
+    "usage": "将此文件复制到用户根目录并重命名为 database_config.json",
+    "location": "~/database_config.json (Windows: C:\\Users\\<YourUsername>\\database_config.json)",
+    "index": "默认使用索引0的数据库，可通过 DatabaseReader(1) 使用第二个数据库",
+    "security": "请勿将此文件上传到Git，添加到 .gitignore"
+  }
+}

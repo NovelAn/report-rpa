@@ -11,7 +11,7 @@ from datetime import date, datetime
 # 添加src到路径
 sys.path.insert(0, str(Path(__file__).parent))
 
-from src.ingestion.database.db_manager import EnhancedDatabaseReader, DatabaseConfigManager
+from src.ingestion.database import DatabaseReader
 from src.models.data_schema import TargetMetric
 
 # 配置日志
@@ -29,16 +29,14 @@ def test_database_connection():
     print("步骤 1: 测试数据库连接")
     print("=" * 80)
 
-    # 显示可用数据库
-    config_manager = DatabaseConfigManager()
-    config_manager.print_available_databases()
-
-    # 连接第一个数据库 (本地localhost)
-    print("\n正在连接第一个数据库 (本地localhost)...")
-    reader = EnhancedDatabaseReader(db_index=0)
+    # 连接数据库 (使用默认配置文件中的第二个数据库)
+    print("\n正在连接数据库...")
+    print(f"配置文件: {Path.home()}/database_config.json")
+    reader = DatabaseReader(1)  # 使用索引1的数据库（第二个）
 
     if not reader.is_connected():
         print("\n✗ 数据库连接失败")
+        print("提示: 请在用户根目录创建 database_config.json 文件")
         return None
 
     print("✓ 数据库连接成功!")
@@ -91,26 +89,20 @@ def inspect_table(reader, table_name: str):
     print(f"总计: {len(structure)} 个字段")
 
 
-def test_sql_query(reader, sql_file: str, params: tuple = None):
+def test_sql_query(reader, query_name: str, params: tuple = None):
     """测试SQL查询"""
     print("\n" + "=" * 80)
-    print(f"步骤 4: 执行SQL查询 - {sql_file}")
+    print(f"步骤 4: 执行SQL查询 - {query_name}")
     print("=" * 80)
-
-    # 检查SQL文件是否存在
-    sql_path = Path(sql_file)
-    if not sql_path.exists():
-        print(f"✗ SQL文件不存在: {sql_file}")
-        return []
 
     # 执行查询
     print(f"\n正在执行查询...")
-    print(f"SQL文件: {sql_file}")
+    print(f"查询名称: {query_name}")
 
     if params:
         print(f"参数: {params}")
 
-    results = reader.execute_sql_file(str(sql_path), params)
+    results = reader.execute_sql_file(query_name, params)
 
     if results:
         print(f"\n✓ 查询成功! 返回 {len(results)} 条记录")
@@ -219,8 +211,8 @@ def main():
     print("数据库工作流测试")
     print("=" * 80)
 
-    # 步骤1: 连接数据库 (使用第一个数据库 - 本地localhost)
-    print("\n提示: 使用第一个数据库 (本地localhost)")
+    # 步骤1: 连接数据库 (使用默认配置)
+    print("\n提示: 使用 ~/database_config.json 中的第一个数据库配置")
     reader = test_database_connection()
     if not reader:
         return
@@ -245,8 +237,8 @@ def main():
             print(f"  - {table}")
 
     # 步骤4: 测试SQL查询
-    # 使用target_metrics.sql
-    sql_file = "src/ingestion/database/queries/target_metrics.sql"
+    # 使用target_metrics查询
+    query_name = "target_metrics"
 
     # 查询最近一个月的数据
     end_date = date.today()
@@ -257,7 +249,7 @@ def main():
         end_date.strftime('%Y-%m-%d')
     )
 
-    results = test_sql_query(reader, sql_file, params)
+    results = test_sql_query(reader, query_name, params)
 
     # 步骤5: 转换为数据模型
     if results:
