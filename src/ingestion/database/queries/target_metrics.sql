@@ -17,25 +17,22 @@ SELECT
     dkm.paid_traffic,
     dkm.free_traffic,
     -- 退款指标
+    dkm.rrc,
     dkm.cancel_amount,
     dkm.return_amount,
     -- DTC细分渠道 - Social (社群推广)
     dkm.dtc_social_net,
     dkm.dtc_social_gmv,
-    dkm.dtc_social_traffic as dtc_social_traffic,
+    dkm.dtc_social_traffic,
+    dkm.dtc_social_spend,
     -- DTC细分渠道 - FF (员工福利)
     dkm.dtc_ff_net,
     dkm.dtc_ff_gmv,
-    dkm.dtc_ff_traffic as dtc_ff_traffic,
-    -- DTC细分渠道 - Ad (广告投放)
-    dkm.dtc_ad_net,
-    dkm.dtc_ad_gmv,
-    dkm.dtc_ad_traffic as dtc_ad_traffic,
-    dkm.dtc_ad_spend,
+    dkm.dtc_ff_traffic,
     -- DTC细分渠道 - Organic (自然流量)
     dkm.dtc_organic_net,
     dkm.dtc_organic_gmv,
-    dkm.dtc_organic_traffic as dtc_organic_traffic
+    dkm.dtc_organic_traffic,
 FROM daily_kpi_metrics dkm
 WHERE DATE(dkm.date) BETWEEN %s AND %s
     AND dkm.channel IN ('PFS', 'DTC', 'TOTAL')
